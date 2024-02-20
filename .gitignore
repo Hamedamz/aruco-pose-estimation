@@ -2,3 +2,7 @@ cal/
 calibration_images/
 Images/
 .idea/
+**/*.jpg
+**/*.png
+env/
+__pycache__/

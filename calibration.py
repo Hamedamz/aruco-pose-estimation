@@ -1,6 +1,6 @@
 '''
 Sample Usage:-
-python calibration.py --dir calibration_checkerboard/ --square_size 0.024
+python calibration.py --dir img/hq_6mm --square_size 0.022
 '''
 
 import numpy as np
@@ -81,5 +81,5 @@ if __name__ == '__main__':
     print(mtx)
     print(dist)
 
-    np.save("calibration_matrix", mtx)
-    np.save("distortion_coefficients", dist)
+    np.save("calibration_matrix_wide_1s", mtx)
+    np.save("distortion_coefficients_wide_1s", dist)
