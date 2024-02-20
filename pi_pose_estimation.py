@@ -145,7 +145,9 @@ def pose_esitmation(frame, matrix_coefficients, distortion_coefficients, marker_
         for r in results:
             corners.append(np.array([r.corners], dtype='float32'))
             ids.append([r.tag_id])
-        ids_np = np.array(ids)
+    ids_np = np.array(ids)
+
+    print(corners)
     if len(corners) > 0:
         for i in range(0, len(ids)):
             # Estimate pose of each marker and return the values rvec and tvec---(different from those of camera coefficients)
@@ -182,7 +184,7 @@ def store_sampes(images, data):
 if __name__ == '__main__':
     ap = argparse.ArgumentParser()
     ap.add_argument("-i", "--camera", required=True, type=str, help="One of pi3, pi3w, or pihq6mm")
-    ap.add_argument("-s", "--marker_size", type=float, help="Dimention of marker (meter)")
+    ap.add_argument("-s", "--marker_size", type=float, default=0.02, help="Dimention of marker (meter)")
     ap.add_argument("-k", "--K_Matrix", required=True, help="Path to calibration matrix (numpy file)")
     ap.add_argument("-d", "--D_Coeff", required=True, help="Path to distortion coefficients (numpy file)")
     ap.add_argument("-m", "--marker", type=str, default="ARUCO", help="Type of tag to detect. One of ARUCO, APRILTAG, or STAG")
@@ -190,7 +192,7 @@ if __name__ == '__main__':
     ap.add_argument("-t", "--duration", type=int, default=60, help="Duration of sampling (second)")
     ap.add_argument("-n", "--sample", type=str, default=30, help="Number of samples per second")
     ap.add_argument("-w", "--width", type=int, default=640, help="Width of image")
-    ap.add_argument("-h", "--height", type=int, default=480, help="Height of image")
+    ap.add_argument("-r", "--height", type=int, default=480, help="Height of image")
     ap.add_argument("-v", "--visible", type=bool, default=False, help="Show camera image")
     args = vars(ap.parse_args())
 
