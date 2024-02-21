@@ -27,13 +27,10 @@ import math
 import os
 import json
 from timeit import default_timer as timer
+from datetime import datetime
 
 
-m_size = 0.02
-# m_size = 0.018
-# image_size = (4608, 2592)
-image_size = (640, 480)
-
+criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 30, 0.001)
 
 camera_map = {
     "pi3": 1,
@@ -41,6 +38,13 @@ camera_map = {
     "pihq6mm": 0,
 }
 
+
+res_map = {
+    "480p": (640, 480),
+    "720p": (1280, 720),
+    "1080p": (1920, 1080),
+    "1440p": (2560, 1440),
+}
 
 class Marker(Enum):
     ARUCO = 1
@@ -86,18 +90,18 @@ def my_estimatePoseSingleMarkers(corners, marker_size, mtx, distortion):
     rvecs = []
     tvecs = []
 
-    for i, c in enumerate(corners):
-        nada, R, t = cv2.solvePnP(marker_points, c, mtx, distortion, False, cv2.SOLVEPNP_IPPE_SQUARE)
-        rvecs.append(R)
-        tvecs.append(t)
-        trash.append(nada)
-        
-        rmat, jacobian = cv2.Rodrigues(R)
-        camera_position = -np.matrix(rmat).T * np.matrix(t)
-        camera_orientation = yawpitchrolldecomposition(rmat)
+    #for i, c in enumerate(corners):
+    nada, R, t = cv2.solvePnP(marker_points, corners, mtx, distortion, False, cv2.SOLVEPNP_IPPE_SQUARE)
+    rvecs.append(R)
+    tvecs.append(t)
+    trash.append(nada)
+    
+    rmat, jacobian = cv2.Rodrigues(R)
+    camera_position = -np.matrix(rmat).T * np.matrix(t)
+    camera_orientation = yawpitchrolldecomposition(rmat)
 #         print("marker location", t)
-        print(f"camera location {i}", camera_position)
-        print(f"camera orientation {i}", camera_orientation)
+    #print(f"camera location {i}", camera_position)
+    #print(f"camera orientation {i}", camera_orientation)
 #         camera_position = -rvec.transpose() @ np.array(tvecs)
 
     # print(tvecs)
@@ -123,9 +127,14 @@ def pose_esitmation(frame, matrix_coefficients, distortion_coefficients, marker_
 
 
     '''
+    marker_points = np.array([[-marker_size / 2, marker_size / 2, 0],
+                              [marker_size / 2, marker_size / 2, 0],
+                              [marker_size / 2, -marker_size / 2, 0],
+                              [-marker_size / 2, -marker_size / 2, 0]], dtype=np.float32)
+    
     gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-    poses = []
-    oriens = []
+    pos = []
+    ori = []
     if marker_type is Marker.ARUCO:
         aruco_dict_type = ARUCO_DICT[dict_type]
         arucoDict = cv2.aruco.getPredefinedDictionary(aruco_dict_type)
@@ -145,31 +154,37 @@ def pose_esitmation(frame, matrix_coefficients, distortion_coefficients, marker_
         for r in results:
             corners.append(np.array([r.corners], dtype='float32'))
             ids.append([r.tag_id])
-    ids_np = np.array(ids)
+        ids = np.array(ids)
 
-    print(corners)
+#     print(corners)
+    
     if len(corners) > 0:
         for i in range(0, len(ids)):
-            # Estimate pose of each marker and return the values rvec and tvec---(different from those of camera coefficients)
-            print(m_size)
-            rvec, tvec, trash, position, orientation = my_estimatePoseSingleMarkers(corners[i], m_size, matrix_coefficients,
-                                                                       distortion_coefficients)
-            poses.append(position)
-            oriens.append(orientation)
-            # Draw a square around the markers
-            if args["visible"]:
-                cv2.aruco.drawDetectedMarkers(gray, corners) 
+            refined_corners = cv2.cornerSubPix(gray, corners[i], (11, 11), (-1, -1), criteria)
+            nada, rvec, tvec = cv2.solvePnP(marker_points, refined_corners, matrix_coefficients, distortion_coefficients, False, cv2.SOLVEPNP_IPPE_SQUARE)
 
-                # Draw Axis
+            rmat, jacobian = cv2.Rodrigues(rvec)
+            # camera position
+            pos.append(-np.matrix(rmat).T * np.matrix(tvec))
+            # camera orientation
+            ori.append(yawpitchrolldecomposition(rmat))
+
+            if args["live"]:
                 gray = cv2.drawFrameAxes(gray, matrix_coefficients, distortion_coefficients, rvec, tvec, length=0.01)
-                gray = cv2.aruco.drawDetectedMarkers(gray, corners, ids_np)
+        
+        if args["live"]:
+            gray = cv2.aruco.drawDetectedMarkers(gray, corners, ids)
 
-    return gray, ids, poses, oriens
+    if ids is None:
+        ids = []
+    else:
+        ids = ids.tolist()           
+    return gray, ids, pos, ori
 
 
-def store_sampes(images, data):
+def save_data(images, data):
     results_dir = datetime.now().strftime("%H%M%S_%m%d%Y")
-    images_dir = os.path.join(dir_name, 'images')
+    images_dir = os.path.join(results_dir, 'images')
     if not os.path.exists(images_dir):
         os.makedirs(images_dir, exist_ok=True)
     
@@ -177,7 +192,7 @@ def store_sampes(images, data):
         json.dump(data, f)
     
     for t, im in zip(data["timestamp"], images):
-        cv2.imwrite(os.path.join(images_dir, f"{t}.jpg", im))
+        cv2.imwrite(os.path.join(images_dir, f"{t}.jpg"), im)
         
 
 
@@ -192,8 +207,9 @@ if __name__ == '__main__':
     ap.add_argument("-t", "--duration", type=int, default=60, help="Duration of sampling (second)")
     ap.add_argument("-n", "--sample", type=str, default=30, help="Number of samples per second")
     ap.add_argument("-w", "--width", type=int, default=640, help="Width of image")
-    ap.add_argument("-r", "--height", type=int, default=480, help="Height of image")
-    ap.add_argument("-v", "--visible", type=bool, default=False, help="Show camera image")
+    ap.add_argument("-g", "--height", type=int, default=480, help="Height of image")
+    ap.add_argument("-v", "--live", type=bool, default=False, help="Show live camera image")
+    ap.add_argument("-r", "--res", type=str, help="Image resolution, one of 480p, 720p, 1080p, or 1440p, overwrites width and height")
     args = vars(ap.parse_args())
 
     data = {
@@ -208,7 +224,9 @@ if __name__ == '__main__':
     images = []
     
     image_size = (args["width"], args["height"])
-    m_size = args["marker_size"]
+    if args["res"] is not None:
+        image_size = res_map[args["res"]]
+    marker_size = args["marker_size"]
     dict_type = args["dict"]
     marker_type = Marker[args["marker"]]
     calibration_matrix_path = args["K_Matrix"]
@@ -216,7 +234,7 @@ if __name__ == '__main__':
     k = np.load(calibration_matrix_path)
     d = np.load(distortion_coefficients_path)
     
-    if args["visible"]:
+    if args["live"]:
         cv2.startWindowThread()
 
     picam2 = Picamera2(camera_map[args["camera"]])
@@ -228,17 +246,17 @@ if __name__ == '__main__':
     while True:
         start = timer()
         im = picam2.capture_array()
-        output, ids, position, oriention = pose_esitmation(im, k, d, marker_type, dict_type)
+        output, ids, pos, ori = pose_esitmation(im, k, d, marker_type, dict_type)
         end = timer()
 
         data["timestamp"].append(start)
         data["duration"].append(end - start)
-        data["position"].append(position)
-        data["orientation"].append(oriention)
+        data["position"].append([p.tolist() for p in pos])
+        data["orientation"].append([o.tolist() for o in ori])
         data["ids"].append(ids)
         images.append(im)
             
-        if args["visible"]:
+        if args["live"]:
             cv2.imshow('Estimated Pose', output)
         
         key = cv2.waitKey(1) & 0xFF
@@ -246,17 +264,20 @@ if __name__ == '__main__':
         if key == ord("q"):
             break
         elif key == ord("i"):
-            m_size = float(input("input marker size in mm:"))/1000
+            marker_size = float(input("input marker size in mm:"))/1000
         elif key == ord("1"):
-            m_size = 0.02
+            marker_size = 0.02
         elif key == ord("2"):
-            m_size = 0.015
+            marker_size = 0.015
         elif key == ord("3"):
-            m_size = 0.01
+            marker_size = 0.01
         elif key == ord("4"):
-            m_size = 0.005
+            marker_size = 0.005
         elif key == ord("5"):
-            m_size = 0.0025
+            marker_size = 0.0025
 
-    if args["visible"]:
+    if args["live"]:
         cv2.destroyAllWindows()
+
+    save_data(images, data)
+
