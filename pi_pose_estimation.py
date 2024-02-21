@@ -28,6 +28,7 @@ import os
 import json
 from timeit import default_timer as timer
 from datetime import datetime
+import logging
 
 
 criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 30, 0.001)
@@ -207,9 +208,11 @@ if __name__ == '__main__':
     ap.add_argument("-t", "--duration", type=int, default=60, help="Duration of sampling (second)")
     ap.add_argument("-n", "--sample", type=str, default=30, help="Number of samples per second")
     ap.add_argument("-w", "--width", type=int, default=640, help="Width of image")
-    ap.add_argument("-g", "--height", type=int, default=480, help="Height of image")
+    ap.add_argument("-y", "--height", type=int, default=480, help="Height of image")
     ap.add_argument("-v", "--live", type=bool, default=False, help="Show live camera image")
     ap.add_argument("-r", "--res", type=str, help="Image resolution, one of 480p, 720p, 1080p, or 1440p, overwrites width and height")
+    ap.add_argument("-g", "--debug", type=bool, default=False, help="Print logs")
+    ap.add_argument("-o", "--save", type=bool, default=False, help="Save data")
     args = vars(ap.parse_args())
 
     data = {
@@ -223,6 +226,8 @@ if __name__ == '__main__':
     
     images = []
     
+    if args["debug"]:
+        logging.getLogger().setLevel(logging.INFO)
     image_size = (args["width"], args["height"])
     if args["res"] is not None:
         image_size = res_map[args["res"]]
@@ -255,7 +260,9 @@ if __name__ == '__main__':
         data["orientation"].append([o.tolist() for o in ori])
         data["ids"].append(ids)
         images.append(im)
-            
+        
+        logging.info(f"ids:\n{ids}\n\nposisions:\n{pos}\n\norientations:\n{ori}\n\n")
+        
         if args["live"]:
             cv2.imshow('Estimated Pose', output)
         
@@ -279,5 +286,6 @@ if __name__ == '__main__':
     if args["live"]:
         cv2.destroyAllWindows()
 
-    save_data(images, data)
+    if args["save"]:
+        save_data(images, data)
 
