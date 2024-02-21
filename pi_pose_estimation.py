@@ -21,7 +21,6 @@ import argparse
 import time
 from picamera2 import Picamera2
 # import stag
-from enum import Enum
 # import apriltag
 import math
 import os
@@ -29,28 +28,11 @@ import json
 from timeit import default_timer as timer
 from datetime import datetime
 import logging
+from consts import res_map, camera_map, Marker
 
 
 criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 30, 0.001)
 
-camera_map = {
-    "pi3": 1,
-    "pi3w": 1,
-    "pihq6mm": 0,
-}
-
-
-res_map = {
-    "480p": (640, 480),
-    "720p": (1280, 720),
-    "1080p": (1920, 1080),
-    "1440p": (2560, 1440),
-}
-
-class Marker(Enum):
-    ARUCO = 1
-    STAG = 2
-    APRILTAG = 3
     
 
 def yawpitchrolldecomposition(R):
@@ -186,6 +168,18 @@ def pose_esitmation(frame, matrix_coefficients, distortion_coefficients, marker_
 def save_data(images, data):
     results_dir = datetime.now().strftime("%H%M%S_%m%d%Y")
     images_dir = os.path.join(results_dir, 'images')
+    
+    for i in range(len(data["ids"])):
+        data["ids"][i] = [j[0] for j in data["ids"][i]]
+            
+    for i in range(len(data["position"])):
+        for j in range(len(data["position"][i])):
+            data["position"][i][j] = [p[0] for p in data["position"][i][j].tolist()]
+            
+    for i in range(len(data["orientation"])):
+        for j in range(len(data["orientation"][i])):
+            data["orientation"][i][j] = [p[0] for p in data["orientation"][i][j].tolist()]
+                
     if not os.path.exists(images_dir):
         os.makedirs(images_dir, exist_ok=True)
     
@@ -194,15 +188,25 @@ def save_data(images, data):
     
     for t, im in zip(data["timestamp"], images):
         cv2.imwrite(os.path.join(images_dir, f"{t}.jpg"), im)
-        
+    
+    total_ims = len(data["timestamp"])
+    exp_dur = data["timestamp"][-1] - data["timestamp"][0]
+    stats = {
+        "total_images": total_ims,
+        "image_per_second": total_ims/exp_dur,
+        "avg_processing_time": sum(data["duration"])/total_ims,
+    }        
+
+    with open(os.path.join(results_dir, "stats.json"), "w") as f:
+        json.dump(stats, f)
 
 
 if __name__ == '__main__':
     ap = argparse.ArgumentParser()
     ap.add_argument("-i", "--camera", required=True, type=str, help="One of pi3, pi3w, or pihq6mm")
     ap.add_argument("-s", "--marker_size", type=float, default=0.02, help="Dimention of marker (meter)")
-    ap.add_argument("-k", "--K_Matrix", required=True, help="Path to calibration matrix (numpy file)")
-    ap.add_argument("-d", "--D_Coeff", required=True, help="Path to distortion coefficients (numpy file)")
+    ap.add_argument("-k", "--K_Matrix", help="Path to calibration matrix (numpy file)")
+    ap.add_argument("-d", "--D_Coeff", help="Path to distortion coefficients (numpy file)")
     ap.add_argument("-m", "--marker", type=str, default="ARUCO", help="Type of tag to detect. One of ARUCO, APRILTAG, or STAG")
     ap.add_argument("-c", "--dict", type=str, default="DICT_4X4_100", help="Type of dictionary of tag to detect")
     ap.add_argument("-t", "--duration", type=int, default=60, help="Duration of sampling (second)")
@@ -210,7 +214,7 @@ if __name__ == '__main__':
     ap.add_argument("-w", "--width", type=int, default=640, help="Width of image")
     ap.add_argument("-y", "--height", type=int, default=480, help="Height of image")
     ap.add_argument("-v", "--live", type=bool, default=False, help="Show live camera image")
-    ap.add_argument("-r", "--res", type=str, help="Image resolution, one of 480p, 720p, 1080p, or 1440p, overwrites width and height")
+    ap.add_argument("-r", "--res", type=str, default="480p", help="Image resolution, one of 480p, 720p, 1080p, or 1440p, overwrites width and height")
     ap.add_argument("-g", "--debug", type=bool, default=False, help="Print logs")
     ap.add_argument("-o", "--save", type=bool, default=False, help="Save data")
     args = vars(ap.parse_args())
@@ -234,8 +238,14 @@ if __name__ == '__main__':
     marker_size = args["marker_size"]
     dict_type = args["dict"]
     marker_type = Marker[args["marker"]]
-    calibration_matrix_path = args["K_Matrix"]
-    distortion_coefficients_path = args["D_Coeff"]
+    if args["K_Matrix"] is None:
+        calibration_matrix_path = os.path.join("calibration", args["camera"], args["res"], "mtx.npy")
+    else:
+        calibration_matrix_path = args["K_Matrix"]
+    if args["D_Coeff"] is None:
+        distortion_coefficients_path = os.path.join("calibration", args["camera"], args["res"], "dist.npy")
+    else:
+        distortion_coefficients_path = args["D_Coeff"]
     k = np.load(calibration_matrix_path)
     d = np.load(distortion_coefficients_path)
     
@@ -248,26 +258,30 @@ if __name__ == '__main__':
     time.sleep(2)
 
     # capture frames from the camera
+    exp_start = time.time()
     while True:
-        start = timer()
+        start = time.time()
         im = picam2.capture_array()
         output, ids, pos, ori = pose_esitmation(im, k, d, marker_type, dict_type)
-        end = timer()
+        end = time.time()
 
         data["timestamp"].append(start)
         data["duration"].append(end - start)
-        data["position"].append([p.tolist() for p in pos])
-        data["orientation"].append([o.tolist() for o in ori])
+        data["position"].append(pos)
+        data["orientation"].append(ori)
         data["ids"].append(ids)
-        images.append(im)
+#         images.append(im)
         
         logging.info(f"ids:\n{ids}\n\nposisions:\n{pos}\n\norientations:\n{ori}\n\n")
         
         if args["live"]:
             cv2.imshow('Estimated Pose', output)
         
+        if end - exp_start >= args["duration"]:
+            break
+        
         key = cv2.waitKey(1) & 0xFF
-
+        
         if key == ord("q"):
             break
         elif key == ord("i"):
