@@ -99,7 +99,7 @@ def my_estimatePoseSingleMarkers(corners, marker_size, mtx, distortion):
     trash.append(nada)
     
     rmat, jacobian = cv2.Rodrigues(R)
-    camera_position = -np.matrix(rmat).T * np.matrix(t)
+    camera_position = -np.matrix(rmat) * np.matrix(t)
     camera_orientation = yawpitchrolldecomposition(rmat)
 #         print("marker location", t)
     #print(f"camera location {i}", camera_position)
@@ -167,8 +167,10 @@ def pose_esitmation(frame, matrix_coefficients, distortion_coefficients, marker_
 
             rmat, jacobian = cv2.Rodrigues(rvec)
             # camera position
-            pos.append(-np.matrix(rmat).T * np.matrix(tvec))
-            # camera orientation
+            # pos.append(-np.matrix(rmat).T * np.matrix(tvec))
+            # marker position
+            pos.append(tvec)
+            # marker orientation
             ori.append(yawpitchrolldecomposition(rmat))
 
             if args["live"]:
