@@ -1,13 +1,6 @@
 '''
 Sample Usage:-
-python pi_pose_estimation.py --K_Matrix calibration_matrix.npy --D_Coeff distortion_coefficients.npy --type DICT_5X5_100
-
-python pi_pose_estimation.py --K_Matrix calibration_matrix.npy --D_Coeff distortion_coefficients.npy --marker ARUCO --dict DICT_6X6_250 --camera 1
-python pi_pose_estimation.py --K_Matrix calibration_matrix_hq_6mm.npy --D_Coeff distortion_coefficients_hq_6mm.npy --marker ARUCO --dict DICT_6X6_250 --camera 0
-
-python pi_pose_estimation.py --K_Matrix calibration_matrix_hq_6mm.npy --D_Coeff distortion_coefficients_hq_6mm.npy --marker STAG --dict 21 --camera 0
-
-python pi_pose_estimation.py --K_Matrix calibration_matrix_hq_6mm.npy --D_Coeff distortion_coefficients_hq_6mm.npy --marker APRILTAG --dict tag36h11 --camera 0
+python pi_pose_estimation.py -i pi3 -r 720p -e test -t 1000 --marker_size 0.02 --live
 
 
 '''
