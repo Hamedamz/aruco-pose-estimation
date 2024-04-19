@@ -1,5 +1,6 @@
 import cv2
 from picamera2 import Picamera2, Preview
+from libcamera import controls
 import time
 import argparse
 from consts import res_map, camera_map
@@ -23,8 +24,9 @@ if __name__ == "__main__":
         os.makedirs(images_dir, exist_ok=True)
 
     picam2 = Picamera2(camera_map[args["camera"]])
-    camera_config = picam2.create_preview_configuration(main={"format": 'XRGB8888', "size": image_size})
+    camera_config = picam2.create_preview_configuration(main={"format": "XRGB8888", "size": image_size})
     picam2.configure(camera_config)
+    picam2.set_controls({"AfMode": controls.AfModeEnum.Continuous})
     picam2.start()
     time.sleep(2)
     num = 0

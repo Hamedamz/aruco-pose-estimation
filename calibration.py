@@ -59,7 +59,7 @@ if __name__ == '__main__':
     ap.add_argument("-d", "--dir", required=True, help="Path to folder containing checkerboard images for calibration")
     ap.add_argument("-w", "--width", type=int, help="Width of checkerboard (default=9)",  default=9)
     ap.add_argument("-t", "--height", type=int, help="Height of checkerboard (default=6)", default=6)
-    ap.add_argument("-s", "--square_size", type=float, default=0.01, help="Length of one edge (in metres)")
+    ap.add_argument("-s", "--square_size", type=float, default=0.01, help="Length of one edge in metres (default=0.01)")
     ap.add_argument("-v", "--visualize", type=str, default="False", help="To visualize each checkerboard image")
     args = vars(ap.parse_args())
     

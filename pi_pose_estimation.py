@@ -29,6 +29,9 @@ from timeit import default_timer as timer
 from datetime import datetime
 import logging
 from consts import res_map, camera_map, Marker
+from libcamera import controls
+import scipy.spatial.transform as transform
+from worker_socket import WorkerSocket
 
 
 criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 30, 0.001)
@@ -36,23 +39,39 @@ criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 30, 0.001)
     
 
 def yawpitchrolldecomposition(R):
-    sin_x    = np.sqrt(R[2,0] * R[2,0] +  R[2,1] * R[2,1])    
-    validity  = sin_x < 1e-6
-    if not validity:
-        z1    = math.atan2(R[2,0], R[2,1])     # around z1-axis
-        x      = math.atan2(sin_x,  R[2,2])     # around x-axis
-        z2    = math.atan2(R[0,2], -R[1,2])    # around z2-axis
-    else: # gimbal lock
-        z1    = 0                                         # around z1-axis
-        x      = math.atan2(sin_x,  R[2,2])     # around x-axis
-        z2    = 0                                         # around z2-axis
+    rotation = transform.Rotation.from_matrix(R)
+    euler_angles = rotation.as_euler('xyz', degrees=True)
 
-    yawpitchroll_angles = np.array([[z1], [x], [z2]])
+#     sy = np.sqrt(R[0,0]*R[0,0] + R[1,0]*R[1,0])
+#     singular = sy < 1e-6
+#     
+#     if not singular:
+#         x = np.arctan2(R[2,1], R[2,2])
+#         y= np.arctan2(-R[2,0], sy)
+#         z= np.arctan2(R[1,0], R[0,0])
+#     else:
+#         x = np.arctan2(-R[1,2], R[1,1])
+#         y = np.arctan2(-R[2,0], sy)
+#         z = 0
+        
+#     sin_x    = np.sqrt(R[2,0] * R[2,0] +  R[2,1] * R[2,1])    
+#     validity  = sin_x < 1e-6
+#     if not validity:
+#         z1    = math.atan2(R[2,0], R[2,1])     # around z1-axis
+#         x      = math.atan2(sin_x,  R[2,2])     # around x-axis
+#         z2    = math.atan2(R[0,2], -R[1,2])    # around z2-axis
+#     else: # gimbal lock
+#         z1    = 0                                         # around z1-axis
+#         x      = math.atan2(sin_x,  R[2,2])     # around x-axis
+#         z2    = 0                                         # around z2-axis
 
-    yawpitchroll_angles = -180*yawpitchroll_angles/math.pi
-    yawpitchroll_angles[0,0] = (360-yawpitchroll_angles[0,0])%360 # change rotation sense if needed, comment this line otherwise
-    yawpitchroll_angles[1,0] = yawpitchroll_angles[1,0]+90
-    return yawpitchroll_angles
+#     yawpitchroll_angles = np.array([[z1], [x], [z2]])
+    
+#     yawpitchroll_angles = np.array([[x], [y], [z]])
+#     yawpitchroll_angles = -180*yawpitchroll_angles/math.pi
+#     yawpitchroll_angles[0,0] = (360-yawpitchroll_angles[0,0])%360 # change rotation sense if needed, comment this line otherwise
+#     yawpitchroll_angles[1,0] = yawpitchroll_angles[1,0]+90
+    return euler_angles
 
 
 def my_estimatePoseSingleMarkers(corners, marker_size, mtx, distortion):
@@ -165,8 +184,18 @@ def pose_esitmation(frame, matrix_coefficients, distortion_coefficients, marker_
     return gray, ids, pos, ori
 
 
+def count_empty_lists(lst):
+    count = 0
+    for item in lst:
+        if not item:
+            count += 1
+            
+    return count
+
+
 def save_data(images, data):
-    results_dir = datetime.now().strftime("%H%M%S_%m%d%Y")
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    results_dir = f"{timestamp}_{args['camera']}_{args['res']}"
     images_dir = os.path.join(results_dir, 'images')
     
     for i in range(len(data["ids"])):
@@ -178,27 +207,34 @@ def save_data(images, data):
             
     for i in range(len(data["orientation"])):
         for j in range(len(data["orientation"][i])):
-            data["orientation"][i][j] = [p[0] for p in data["orientation"][i][j].tolist()]
+            data["orientation"][i][j] = data["orientation"][i][j].tolist()
                 
     if not os.path.exists(images_dir):
         os.makedirs(images_dir, exist_ok=True)
+    
+    total_ims = len(data["timestamp"])
+    exp_dur = data["timestamp"][-1] - data["timestamp"][0]
+    filtered_pos = list(filter(bool, data["position"]))
+    filtered_ori = list(filter(bool, data["orientation"]))
+    stats = {
+        "exp_duration": exp_dur,
+        "total_images": total_ims,
+        "image_per_second": total_ims/exp_dur,
+        "avg_camera_delay": sum(data["camera_delay"])/total_ims,
+        "avg_alg_delay": sum(data["alg_delay"])/total_ims,
+        "avg_position": np.mean(filtered_pos, axis=0).tolist(),
+        "avg_distance": np.mean(np.linalg.norm(filtered_pos, axis=2), axis=0).tolist(),
+        "avg_abs_orientation": np.mean(np.abs(filtered_ori), axis=0).tolist(),
+        "detection_rate": 1-count_empty_lists(data["ids"])/total_ims,
+    }
+    
+    data["stats"] = stats
     
     with open(os.path.join(results_dir, "data.json"), "w") as f:
         json.dump(data, f)
     
     for t, im in zip(data["timestamp"], images):
         cv2.imwrite(os.path.join(images_dir, f"{t}.jpg"), im)
-    
-    total_ims = len(data["timestamp"])
-    exp_dur = data["timestamp"][-1] - data["timestamp"][0]
-    stats = {
-        "total_images": total_ims,
-        "image_per_second": total_ims/exp_dur,
-        "avg_processing_time": sum(data["duration"])/total_ims,
-    }        
-
-    with open(os.path.join(results_dir, "stats.json"), "w") as f:
-        json.dump(stats, f)
 
 
 if __name__ == '__main__':
@@ -213,22 +249,27 @@ if __name__ == '__main__':
     ap.add_argument("-n", "--sample", type=str, default=30, help="Number of samples per second")
     ap.add_argument("-w", "--width", type=int, default=640, help="Width of image")
     ap.add_argument("-y", "--height", type=int, default=480, help="Height of image")
-    ap.add_argument("-v", "--live", type=bool, default=False, help="Show live camera image")
+    ap.add_argument("-v", "--live", action="store_true", help="Show live camera image")
     ap.add_argument("-r", "--res", type=str, default="480p", help="Image resolution, one of 480p, 720p, 1080p, or 1440p, overwrites width and height")
-    ap.add_argument("-g", "--debug", type=bool, default=False, help="Print logs")
-    ap.add_argument("-o", "--save", type=bool, default=False, help="Save data")
+    ap.add_argument("-g", "--debug", action="store_true", help="Print logs")
+    ap.add_argument("-o", "--save", action="store_true", help="Save data")
+    ap.add_argument("-e", "--note", type=str, help="Notes")
+    ap.add_argument("-l", "--lenspos", type=float, help="Lens position for manual focus")
     args = vars(ap.parse_args())
 
     data = {
+        "stats": {},
+        "args": args,
         "timestamp": [],
         "ids": [],
-        "duration": [],
+        "alg_delay": [],
+        "camera_delay": [],
         "position": [],
         "orientation": [],
-        "args": args,
     }
     
     images = []
+    sock = WorkerSocket()
     
     if args["debug"]:
         logging.getLogger().setLevel(logging.INFO)
@@ -253,28 +294,52 @@ if __name__ == '__main__':
         cv2.startWindowThread()
 
     picam2 = Picamera2(camera_map[args["camera"]])
-    picam2.configure(picam2.create_preview_configuration(main={"format": 'XRGB8888', "size": image_size}))
+    mode = picam2.sensor_modes[0]
+#     picam2.configure(picam2.create_preview_configuration(sensor={"output_size": mode["size"], "bit_depth": mode["bit_depth"]}, main={"size": image_size}))
+    picam2.configure(picam2.create_preview_configuration(main={"format": "XRGB8888", "size": image_size}))
+    if args["camera"] != "pihq6mm":
+        if args["lenspos"]:
+            picam2.set_controls({"AfMode": controls.AfModeEnum.Manual, "LensPosition": args['lenspos']})
+        else:
+            picam2.set_controls({"AfMode": controls.AfModeEnum.Continuous})
+#         picam2.controls.ExposureTime = 2000
     picam2.start()
     time.sleep(2)
 
     # capture frames from the camera
     exp_start = time.time()
+    msg = 0
     while True:
         start = time.time()
         im = picam2.capture_array()
+        mid = time.time()
         output, ids, pos, ori = pose_esitmation(im, k, d, marker_type, dict_type)
         end = time.time()
+        
+        if len(pos) and len(ori):
+            p = pos[0].tolist()
+            # print(p)
+            # print(ori)
+            
+            msg = f"{p[0][0]},{p[1][0]},{p[2][0]},{ori[0][0]},{ori[0][1]},{ori[0][2]}"
+            print(f"x={p[0][0]:.2f},y={p[1][0]:.2f},z={p[2][0]:.2f},norm={np.linalg.norm(np.array([p[0][0], p[1][0], p[2][0]]))},{ori[0][0]:.2f},{ori[0][1]:.2f},{ori[0][2]:.2f}")
+        if msg:
+            sock.broadcast(msg)
 
         data["timestamp"].append(start)
-        data["duration"].append(end - start)
+        data["alg_delay"].append(end - mid)
+        data["camera_delay"].append(mid - start)
         data["position"].append(pos)
         data["orientation"].append(ori)
         data["ids"].append(ids)
-#         images.append(im)
+        
+        if args["save"]:
+            images.append(im)
         
         logging.info(f"ids:\n{ids}\n\nposisions:\n{pos}\n\norientations:\n{ori}\n\n")
         
         if args["live"]:
+            cv2.rectangle(output,(image_size[0]//2-50,image_size[1]//2-50),(image_size[0]//2+50,image_size[1]//2+50),(0,255,0),1)
             cv2.imshow('Estimated Pose', output)
         
         if end - exp_start >= args["duration"]:
@@ -302,4 +367,7 @@ if __name__ == '__main__':
 
     if args["save"]:
         save_data(images, data)
+        
+    lens_position = picam2.capture_metadata()["LensPosition"]
+    print(lens_position)
 

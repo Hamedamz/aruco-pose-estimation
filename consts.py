@@ -2,7 +2,7 @@ from enum import Enum
 
 
 camera_map = {
-    "pi3": 1,
+    "pi3": 0,
     "pi3w": 1,
     "pihq6mm": 0,
 }
