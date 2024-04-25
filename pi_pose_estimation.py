@@ -1,8 +1,6 @@
 '''
 Sample Usage:-
 python pi_pose_estimation.py -i pi3 -r 720p -e test -t 1000 --marker_size 0.02 --live
-
-
 '''
 
 
@@ -12,7 +10,6 @@ import sys
 from utils import ARUCO_DICT
 import argparse
 import time
-from picamera2 import Picamera2
 # import stag
 # import apriltag
 import math
@@ -22,9 +19,10 @@ from timeit import default_timer as timer
 from datetime import datetime
 import logging
 from consts import res_map, camera_map, Marker
-from libcamera import controls
 import scipy.spatial.transform as transform
 from worker_socket import WorkerSocket
+import socket
+import struct
 
 
 criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 30, 0.001)
@@ -234,7 +232,7 @@ def save_data(images, data):
 
 if __name__ == '__main__':
     ap = argparse.ArgumentParser()
-    ap.add_argument("-i", "--camera", required=True, type=str, help="One of pi3, pi3w, or pihq6mm")
+    ap.add_argument("-i", "--camera", required=True, type=str, help="One of aideck, pi3, pi3w, or pihq6mm")
     ap.add_argument("-s", "--marker_size", type=float, default=0.02, help="Dimention of marker (meter)")
     ap.add_argument("-k", "--K_Matrix", help="Path to calibration matrix (numpy file)")
     ap.add_argument("-d", "--D_Coeff", help="Path to distortion coefficients (numpy file)")
@@ -245,9 +243,10 @@ if __name__ == '__main__':
     ap.add_argument("-w", "--width", type=int, default=640, help="Width of image")
     ap.add_argument("-y", "--height", type=int, default=480, help="Height of image")
     ap.add_argument("-v", "--live", action="store_true", help="Show live camera image")
-    ap.add_argument("-r", "--res", type=str, default="480p", help="Image resolution, one of 480p, 720p, 1080p, or 1440p, overwrites width and height")
+    ap.add_argument("-r", "--res", type=str, default="480p", help="Image resolution, one of 244p, 480p, 720p, 1080p, or 1440p, overwrites width and height")
     ap.add_argument("-g", "--debug", action="store_true", help="Print logs")
     ap.add_argument("-o", "--save", action="store_true", help="Save data")
+    ap.add_argument("-b", "--broadcast", action="store_true", help="Broadcast measurements modify worker socket with proper ip and port")
     ap.add_argument("-e", "--note", type=str, help="Notes")
     ap.add_argument("-l", "--lenspos", type=float, help="Lens position for manual focus")
     args = vars(ap.parse_args())
@@ -264,7 +263,9 @@ if __name__ == '__main__':
     }
     
     images = []
-    sock = WorkerSocket()
+
+    if args["broadcast"]:
+        sock = WorkerSocket()
     
     if args["debug"]:
         logging.getLogger().setLevel(logging.INFO)
@@ -288,38 +289,83 @@ if __name__ == '__main__':
     if args["live"]:
         cv2.startWindowThread()
 
-    picam2 = Picamera2(camera_map[args["camera"]])
-    mode = picam2.sensor_modes[0]
-#     picam2.configure(picam2.create_preview_configuration(sensor={"output_size": mode["size"], "bit_depth": mode["bit_depth"]}, main={"size": image_size}))
-    picam2.configure(picam2.create_preview_configuration(main={"format": "XRGB8888", "size": image_size}))
-    if args["camera"] != "pihq6mm":
-        if args["lenspos"]:
-            picam2.set_controls({"AfMode": controls.AfModeEnum.Manual, "LensPosition": args['lenspos']})
-        else:
-            picam2.set_controls({"AfMode": controls.AfModeEnum.Continuous})
-#         picam2.controls.ExposureTime = 2000
-    picam2.start()
-    time.sleep(2)
+
+    if args["camera"] == "aideck":
+        deck_port = 5000
+        deck_ip = "192.168.4.1"
+
+        print("Connecting to socket on {}:{}...".format(deck_ip, deck_port))
+        client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        client_socket.connect((deck_ip, deck_port))
+        print("Socket connected")
+
+        imgdata = None
+        data_buffer = bytearray()
+
+        def rx_bytes(size):
+            data = bytearray()
+            while len(data) < size:
+                data.extend(client_socket.recv(size - len(data)))
+            return data
+    else:
+        from picamera2 import Picamera2
+        from libcamera import controls
+        picam2 = Picamera2(camera_map[args["camera"]])
+        mode = picam2.sensor_modes[0]
+        #     picam2.configure(picam2.create_preview_configuration(sensor={"output_size": mode["size"], "bit_depth": mode["bit_depth"]}, main={"size": image_size}))
+        picam2.configure(picam2.create_preview_configuration(main={"format": "XRGB8888", "size": image_size}))
+        if args["camera"] != "pihq6mm":
+            if args["lenspos"]:
+                picam2.set_controls({"AfMode": controls.AfModeEnum.Manual, "LensPosition": args['lenspos']})
+            else:
+                picam2.set_controls({"AfMode": controls.AfModeEnum.Continuous})
+        # picam2.controls.ExposureTime = 2000
+        picam2.start()
+        time.sleep(2)
 
     # capture frames from the camera
     exp_start = time.time()
     msg = 0
     while True:
         start = time.time()
-        im = picam2.capture_array()
+
+        if args["camera"] == "aideck":
+            packetInfoRaw = rx_bytes(4)
+            [length, routing, function] = struct.unpack('<HBB', packetInfoRaw)
+            imgHeader = rx_bytes(length - 2)
+            [magic, width, height, depth, format, size] = struct.unpack('<BHHBBI', imgHeader)
+
+            if magic == 0xBC:
+                imgStream = bytearray()
+
+                while len(imgStream) < size:
+                    packetInfoRaw = rx_bytes(4)
+                    [length, dst, src] = struct.unpack('<HBB', packetInfoRaw)
+                    chunk = rx_bytes(length - 2)
+                    imgStream.extend(chunk)
+
+                if format == 0:
+                    bayer_img = np.frombuffer(imgStream, dtype=np.uint8)
+                    bayer_img.shape = (244, 324)
+                    color_img = cv2.cvtColor(bayer_img, cv2.COLOR_BayerBG2BGRA)
+                    im = color_img
+        else:
+            im = picam2.capture_array()
+
         mid = time.time()
         output, ids, pos, ori = pose_esitmation(im, k, d, marker_type, dict_type)
         end = time.time()
-        
-        if len(pos) and len(ori):
-            p = pos[0].tolist()
-            # print(p)
-            # print(ori)
-            
-            msg = f"{p[0][0]},{p[1][0]},{p[2][0]},{ori[0][0]},{ori[0][1]},{ori[0][2]}"
-            print(f"x={p[0][0]:.2f},y={p[1][0]:.2f},z={p[2][0]:.2f},norm={np.linalg.norm(np.array([p[0][0], p[1][0], p[2][0]]))},{ori[0][0]:.2f},{ori[0][1]:.2f},{ori[0][2]:.2f}")
-        if msg:
-            sock.broadcast(msg)
+
+        if args["broadcast"]:
+            if len(pos) and len(ori):
+                p = pos[0].tolist()
+                # print(p)
+                # print(ori)
+
+                msg = f"{p[0][0]},{p[1][0]},{p[2][0]},{ori[0][0]},{ori[0][1]},{ori[0][2]}"
+                print(f"x={p[0][0]:.2f},y={p[1][0]:.2f},z={p[2][0]:.2f},norm={np.linalg.norm(np.array([p[0][0], p[1][0], p[2][0]]))},{ori[0][0]:.2f},{ori[0][1]:.2f},{ori[0][2]:.2f}")
+            if msg:
+                sock.broadcast(msg)
 
         data["timestamp"].append(start)
         data["alg_delay"].append(end - mid)
@@ -363,6 +409,6 @@ if __name__ == '__main__':
     if args["save"]:
         save_data(images, data)
         
-    lens_position = picam2.capture_metadata()["LensPosition"]
-    print(lens_position)
+    # lens_position = picam2.capture_metadata()["LensPosition"]
+    # print(lens_position)
 
