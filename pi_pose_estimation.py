@@ -248,6 +248,8 @@ if __name__ == '__main__':
     ap.add_argument("-r", "--res", type=str, default="480p", help="Image resolution, one of 480p, 720p, 1080p, or 1440p, overwrites width and height")
     ap.add_argument("-g", "--debug", action="store_true", help="Print logs")
     ap.add_argument("-o", "--save", action="store_true", help="Save data")
+    ap.add_argument("-b", "--broadcast", action="store_true", help="Broadcast data")
+    ap.add_argument("-sm", "--sensor_modes", action="store_true", help="Print sensor modes of the camera and terminate.")
     ap.add_argument("-e", "--note", type=str, help="Notes")
     ap.add_argument("-l", "--lenspos", type=float, help="Lens position for manual focus")
     args = vars(ap.parse_args())
@@ -264,7 +266,9 @@ if __name__ == '__main__':
     }
     
     images = []
-    sock = WorkerSocket()
+    
+    if args["broadcast"]:
+        sock = WorkerSocket()
     
     if args["debug"]:
         logging.getLogger().setLevel(logging.INFO)
@@ -289,9 +293,18 @@ if __name__ == '__main__':
         cv2.startWindowThread()
 
     picam2 = Picamera2(camera_map[args["camera"]])
-    mode = picam2.sensor_modes[0]
+    modes = picam2.sensor_modes
+    
+    if args["sensor_modes"]:
+        print(modes)
+        exit()
 #     picam2.configure(picam2.create_preview_configuration(sensor={"output_size": mode["size"], "bit_depth": mode["bit_depth"]}, main={"size": image_size}))
-    picam2.configure(picam2.create_preview_configuration(main={"format": "XRGB8888", "size": image_size}))
+    # cam_conf = picam2.create_preview_configuration(main={"format": "XRGB8888", "size": image_size})
+    cam_conf = picam2.create_video_configuration(main={"format": "XRGB8888", "size": image_size})
+    picam2.configure(cam_conf)
+    
+    picam2.set_controls({"FrameDurationLimits": (8333, 8333)})
+    
     if args["camera"] != "pihq6mm":
         if args["lenspos"]:
             picam2.set_controls({"AfMode": controls.AfModeEnum.Manual, "LensPosition": args['lenspos']})
@@ -311,15 +324,16 @@ if __name__ == '__main__':
         output, ids, pos, ori = pose_esitmation(im, k, d, marker_type, dict_type)
         end = time.time()
         
-        if len(pos) and len(ori):
-            p = pos[0].tolist()
-            # print(p)
-            # print(ori)
-            
-            msg = f"{p[0][0]},{p[1][0]},{p[2][0]},{ori[0][0]},{ori[0][1]},{ori[0][2]}"
-            print(f"x={p[0][0]:.2f},y={p[1][0]:.2f},z={p[2][0]:.2f},norm={np.linalg.norm(np.array([p[0][0], p[1][0], p[2][0]]))},{ori[0][0]:.2f},{ori[0][1]:.2f},{ori[0][2]:.2f}")
-        if msg:
-            sock.broadcast(msg)
+        if args["broadcast"]:
+            if len(pos) and len(ori):
+                p = pos[0].tolist()
+                # print(p)
+                # print(ori)
+                
+                msg = f"{p[0][0]},{p[1][0]},{p[2][0]},{ori[0][0]},{ori[0][1]},{ori[0][2]}"
+                # print(f"x={p[0][0]:.3f},y={p[1][0]:.3f},z={p[2][0]:.3f},norm={np.linalg.norm(np.array([p[0][0], p[1][0], p[2][0]])):.3f},{ori[0][0]:.2f},{ori[0][1]:.2f},{ori[0][2]:.2f}")
+            if msg:
+                sock.broadcast(msg)
 
         data["timestamp"].append(start)
         data["alg_delay"].append(end - mid)
@@ -364,5 +378,5 @@ if __name__ == '__main__':
         save_data(images, data)
         
     lens_position = picam2.capture_metadata()["LensPosition"]
-    print(lens_position)
+    logging.info(f"lens position: {lens_position}")
 
