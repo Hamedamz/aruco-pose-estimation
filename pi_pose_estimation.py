@@ -246,8 +246,9 @@ if __name__ == '__main__':
     ap.add_argument("-r", "--res", type=str, default="480p", help="Image resolution, one of 244p, 480p, 720p, 1080p, or 1440p, overwrites width and height")
     ap.add_argument("-g", "--debug", action="store_true", help="Print logs")
     ap.add_argument("-o", "--save", action="store_true", help="Save data")
-    ap.add_argument("-sm", "--sensor_modes", action="store_true", help="Print sensor modes of the camera and terminate.")
+    ap.add_argument("-sm", "--sensor_modes", action="store_true", help="Print sensor modes of the camera and terminate")
     ap.add_argument("-b", "--broadcast", action="store_true", help="Broadcast measurements modify worker socket with proper ip and port")
+    ap.add_argument("-mr", "--max_fps", action="store_true", help="Use maximum fps")
     ap.add_argument("-e", "--note", type=str, help="Notes")
     ap.add_argument("-l", "--lenspos", type=float, help="Lens position for manual focus")
     args = vars(ap.parse_args())
@@ -318,10 +319,11 @@ if __name__ == '__main__':
             print(modes)
             exit()
         #     picam2.configure(picam2.create_preview_configuration(sensor={"output_size": mode["size"], "bit_depth": mode["bit_depth"]}, main={"size": image_size}))
-        # picam2.configure(picam2.create_preview_configuration(main={"format": "XRGB8888", "size": image_size}))
+        # cam_conf = picam2.create_preview_configuration(main={"format": "XRGB8888", "size": image_size})
         cam_conf = picam2.create_video_configuration(main={"format": "XRGB8888", "size": image_size})
         picam2.configure(cam_conf)
-        picam2.set_controls({"FrameDurationLimits": (8333, 8333)})
+        if args["max_fps"]:
+            picam2.set_controls({"FrameDurationLimits": (8333, 8333)})
         
         if args["camera"] != "pihq6mm":
             if args["lenspos"]:
