@@ -108,7 +108,7 @@ def my_estimatePoseSingleMarkers(corners, marker_size, mtx, distortion):
     return rvecs, tvecs, trash, camera_position, camera_orientation
 
 
-def pose_esitmation(frame, matrix_coefficients, distortion_coefficients, marker_type, dict_type):
+def pose_estimation(frame, matrix_coefficients, distortion_coefficients, marker_type, dict_type):
 
     '''
     frame - Frame from the video stream
@@ -188,7 +188,7 @@ def count_empty_lists(lst):
 
 def save_data(images, data):
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    results_dir = f"{timestamp}_{args['camera']}_{args['res']}"
+    results_dir = os.path.join("results", f"{timestamp}_{args['camera']}_{args['res']}")
     images_dir = os.path.join(results_dir, 'images')
     
     for i in range(len(data["ids"])):
@@ -366,7 +366,7 @@ if __name__ == '__main__':
             im = picam2.capture_array()
 
         mid = time.time()
-        output, ids, pos, ori = pose_esitmation(im, k, d, marker_type, dict_type)
+        output, ids, pos, ori = pose_estimation(im, k, d, marker_type, dict_type)
         end = time.time()
 
         if args["broadcast"]:
