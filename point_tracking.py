@@ -395,10 +395,10 @@ if __name__ == '__main__':
                            [-1, 1, 3, 1, -1],
                            [-1, 3, 4, 3, -1],
                            [-1, 1, 3, 1, -1],
-                           [-2, -1, -1, -1, -2]])/2
+                           [-2, -1, -1, -1, -2]])*2
         im = cv2.filter2D(im, -1, kernel)
         im, dots = find_dot(im)
-        print(dots)
+        # print(dots)
         output, ids, pos, ori = pose_estimation(im, k, d, marker_type, dict_type)
         end = time.time()
 
