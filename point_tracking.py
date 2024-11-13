@@ -229,7 +229,8 @@ def save_data(images, data):
 
 def find_dot(img):
     # img = cv.GaussianBlur(img,(5,5),0)
-    grey = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
+    grey = img
+    # grey = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
     grey = cv2.threshold(grey, 255 * 0.2, 255, cv2.THRESH_BINARY)[1]
     contours, _ = cv2.findContours(grey, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
     img = cv2.drawContours(img, contours, -1, (0, 255, 0), 1)
@@ -399,8 +400,7 @@ if __name__ == '__main__':
         #                    [-2, -1, -1, -1, -2]])
         # im = cv2.filter2D(im, -1, kernel)
         # im = cv2.convertScaleAbs(im, alpha=1.5, beta=0)
-        im = cv2.adaptiveThreshold(im, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
-                              cv2.THRESH_BINARY, 11, 2)
+
         im, dots = find_dot(im)
         # print(dots)
         output, ids, pos, ori = pose_estimation(im, k, d, marker_type, dict_type)
