@@ -390,13 +390,14 @@ if __name__ == '__main__':
 
         mid = time.time()
         im = cv2.undistort(im, k, d)
-        im = cv2.GaussianBlur(im, (9, 9), 0)
-        kernel = np.array([[-2, -1, -1, -1, -2],
-                           [-1, 1, 3, 1, -1],
-                           [-1, 3, 4, 3, -1],
-                           [-1, 1, 3, 1, -1],
-                           [-2, -1, -1, -1, -2]])*2
-        im = cv2.filter2D(im, -1, kernel)
+        im = cv2.GaussianBlur(im, (5, 5), 0)
+        # kernel = np.array([[-2, -1, -1, -1, -2],
+        #                    [-1, 1, 3, 1, -1],
+        #                    [-1, 3, 4, 3, -1],
+        #                    [-1, 1, 3, 1, -1],
+        #                    [-2, -1, -1, -1, -2]])
+        # im = cv2.filter2D(im, -1, kernel)
+        im = cv2.convertScaleAbs(im, alpha=1.5, beta=0)
         im, dots = find_dot(im)
         # print(dots)
         output, ids, pos, ori = pose_estimation(im, k, d, marker_type, dict_type)
