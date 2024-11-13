@@ -389,6 +389,7 @@ if __name__ == '__main__':
             im = picam2.capture_array()
 
         mid = time.time()
+        im = cv2.cvtColor(im, cv2.COLOR_BGR2GRAY)
         im = cv2.undistort(im, k, d)
         im = cv2.GaussianBlur(im, (5, 5), 0)
         # kernel = np.array([[-2, -1, -1, -1, -2],
