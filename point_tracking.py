@@ -227,6 +227,30 @@ def save_data(images, data):
         cv2.imwrite(os.path.join(images_dir, f"{t}.jpg"), im)
 
 
+def find_dot(img):
+    # img = cv.GaussianBlur(img,(5,5),0)
+    grey = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
+    grey = cv2.threshold(grey, 255 * 0.2, 255, cv2.THRESH_BINARY)[1]
+    contours, _ = cv2.findContours(grey, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+    img = cv2.drawContours(img, contours, -1, (0, 255, 0), 1)
+
+    image_points = []
+    for contour in contours:
+        moments = cv2.moments(contour)
+        if moments["m00"] != 0:
+            center_x = int(moments["m10"] / moments["m00"])
+            center_y = int(moments["m01"] / moments["m00"])
+            cv2.putText(img, f'({center_x}, {center_y})', (center_x, center_y - 15), cv2.FONT_HERSHEY_SIMPLEX, 0.3,
+                        (100, 255, 100), 1)
+            cv2.circle(img, (center_x, center_y), 1, (100, 255, 100), -1)
+            image_points.append([center_x, center_y])
+
+    if len(image_points) == 0:
+        image_points = [[None, None]]
+
+    return img, image_points
+
+
 if __name__ == '__main__':
     ap = argparse.ArgumentParser()
     ap.add_argument("-i", "--camera", required=True, type=str, help="One of aideck, pi3, pi3w, or pihq6mm")
@@ -367,12 +391,14 @@ if __name__ == '__main__':
         mid = time.time()
         im = cv2.undistort(im, k, d)
         im = cv2.GaussianBlur(im, (9, 9), 0)
-        # kernel = np.array([[-2, -1, -1, -1, -2],
-        #                    [-1, 1, 3, 1, -1],
-        #                    [-1, 3, 4, 3, -1],
-        #                    [-1, 1, 3, 1, -1],
-        #                    [-2, -1, -1, -1, -2]])
-        # im = cv2.filter2D(im, -1, kernel)
+        kernel = np.array([[-2, -1, -1, -1, -2],
+                           [-1, 1, 3, 1, -1],
+                           [-1, 3, 4, 3, -1],
+                           [-1, 1, 3, 1, -1],
+                           [-2, -1, -1, -1, -2]])/2
+        im = cv2.filter2D(im, -1, kernel)
+        im, dots = find_dot(im)
+        print(dots)
         output, ids, pos, ori = pose_estimation(im, k, d, marker_type, dict_type)
         end = time.time()
 
@@ -430,5 +456,3 @@ if __name__ == '__main__':
 
     lens_position = picam2.capture_metadata()["LensPosition"]
     logging.info(f"lens position: {lens_position}")
-
-
