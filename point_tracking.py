@@ -395,12 +395,12 @@ if __name__ == '__main__':
         # im = cv2.cvtColor(im, cv2.COLOR_BGR2GRAY)
         im = cv2.undistort(im, k, d)
         im = cv2.GaussianBlur(im, (5, 5), 0)
-        # kernel = np.array([[-2, -1, -1, -1, -2],
-        #                    [-1, 1, 3, 1, -1],
-        #                    [-1, 3, 4, 3, -1],
-        #                    [-1, 1, 3, 1, -1],
-        #                    [-2, -1, -1, -1, -2]])
-        # im = cv2.filter2D(im, -1, kernel)
+        kernel = np.array([[-2, -1, -1, -1, -2],
+                           [-1, 1, 3, 1, -1],
+                           [-1, 3, 4, 3, -1],
+                           [-1, 1, 3, 1, -1],
+                           [-2, -1, -1, -1, -2]])
+        im = cv2.filter2D(im, -1, kernel)
         # im = cv2.convertScaleAbs(im, alpha=1.5, beta=0)
 
         im, dots = find_dot(im)
