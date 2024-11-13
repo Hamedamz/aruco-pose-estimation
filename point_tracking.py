@@ -231,9 +231,9 @@ def find_dot(img):
     # img = cv.GaussianBlur(img,(5,5),0)
     # grey = img
     grey = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
-    # grey = cv2.threshold(grey, 255 * 0.2, 255, cv2.THRESH_BINARY)[1]
-    grey = cv2.adaptiveThreshold(grey, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
-                               cv2.THRESH_BINARY, 11, 2)
+    grey = cv2.threshold(grey, 255 * 0.2, 255, cv2.THRESH_BINARY)[1]
+    # grey = cv2.adaptiveThreshold(grey, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
+    #                            cv2.THRESH_BINARY, 11, 2)
     contours, _ = cv2.findContours(grey, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
     img = cv2.drawContours(img, contours, -1, (0, 255, 0), 1)
 
