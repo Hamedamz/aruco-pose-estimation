@@ -229,9 +229,11 @@ def save_data(images, data):
 
 def find_dot(img):
     # img = cv.GaussianBlur(img,(5,5),0)
-    grey = img
-    # grey = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
-    grey = cv2.threshold(grey, 255 * 0.2, 255, cv2.THRESH_BINARY)[1]
+    # grey = img
+    grey = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
+    # grey = cv2.threshold(grey, 255 * 0.2, 255, cv2.THRESH_BINARY)[1]
+    grey = cv2.adaptiveThreshold(grey, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
+                               cv2.THRESH_BINARY, 11, 2)
     contours, _ = cv2.findContours(grey, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
     img = cv2.drawContours(img, contours, -1, (0, 255, 0), 1)
 
@@ -390,7 +392,7 @@ if __name__ == '__main__':
             im = picam2.capture_array()
 
         mid = time.time()
-        im = cv2.cvtColor(im, cv2.COLOR_BGR2GRAY)
+        # im = cv2.cvtColor(im, cv2.COLOR_BGR2GRAY)
         im = cv2.undistort(im, k, d)
         im = cv2.GaussianBlur(im, (5, 5), 0)
         # kernel = np.array([[-2, -1, -1, -1, -2],
