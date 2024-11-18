@@ -405,7 +405,7 @@ if __name__ == '__main__':
         else:
             im = picam2.capture_array()
 
-        if marker_type == '4P':
+        if marker_type == 'P4':
             mid = time.time()
             output, ids, pos, ori = pose_estimation_p4(im, k, d)
             end = time.time()
