@@ -239,13 +239,53 @@ def save_data(images, data):
         cv2.imwrite(os.path.join(images_dir, f"{t}.jpg"), im)
 
 
+def pose_estimation_4p(im, k, d):
+    im = cv2.GaussianBlur(im, (9, 9), 0)
+    grey = cv2.cvtColor(im, cv2.COLOR_RGB2GRAY)
+    grey = cv2.threshold(grey, 255 * 0.75, 255, cv2.THRESH_BINARY)[1]
+
+    contours, _ = cv2.findContours(grey, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+    img = cv2.drawContours(im, contours, -1, (255, 0, 0), 5)
+
+    image_points = []
+    for contour in contours:
+        moments = cv2.moments(contour)
+        if moments["m00"] > 100:
+            center_x = int(moments["m10"] / moments["m00"])
+            center_y = int(moments["m01"] / moments["m00"])
+            # cv2.putText(img, f'({center_x}, {center_y})', (center_x, center_y - 15), cv2.FONT_HERSHEY_SIMPLEX, 0.3,
+            # (0, 0, 255), 15)
+            cv2.circle(img, (center_x, center_y), 10, (0, 0, 255), -1)
+            image_points.append([center_x, center_y])
+
+    if len(image_points) == 0:
+        image_points = []
+    else:
+        return img, [], [], []
+
+    corners = np.array(image_points, dtype=np.float32)
+    marker_points = np.array([[0, 0, 0],
+                              [46.4, -2, 0],
+                              [44.4, -19.7, 0],
+                              [9.4, -29.1, 0]], dtype=np.float32) / 1000
+
+
+    nada, rvec, tvec = cv2.solvePnP(marker_points, corners, k, d, False, cv2.SOLVEPNP_AP3P)
+
+    rmat, jacobian = cv2.Rodrigues(rvec)
+
+    pose = tvec
+    ori = yawpitchrolldecomposition(rmat)
+    return img, [0], pose, ori
+
+
 if __name__ == '__main__':
     ap = argparse.ArgumentParser()
     ap.add_argument("-i", "--camera", required=True, type=str, help="One of arducam, aideck, pi3, pi3w, or pihq6mm")
     ap.add_argument("-s", "--marker_size", type=float, default=0.02, help="Dimention of marker (meter)")
     ap.add_argument("-k", "--K_Matrix", help="Path to calibration matrix (numpy file)")
     ap.add_argument("-d", "--D_Coeff", help="Path to distortion coefficients (numpy file)")
-    ap.add_argument("-m", "--marker", type=str, default="ARUCO", help="Type of tag to detect. One of ARUCO, APRILTAG, or STAG")
+    ap.add_argument("-m", "--marker", type=str, default="ARUCO", help="Type of tag to detect. One of ARUCO, APRILTAG, STAG, or 4P")
     ap.add_argument("-c", "--dict", type=str, default="DICT_4X4_100", help="Type of dictionary of tag to detect")
     ap.add_argument("-t", "--duration", type=int, default=60, help="Duration of sampling (second)")
     ap.add_argument("-n", "--sample", type=str, default=30, help="Number of samples per second")
@@ -374,9 +414,15 @@ if __name__ == '__main__':
         else:
             im = picam2.capture_array()
 
-        mid = time.time()
-        output, ids, pos, ori = pose_estimation(im, k, d, marker_type, dict_type)
-        end = time.time()
+        if marker_type == '4P':
+            mid = time.time()
+            output, ids, pos, ori = pose_estimation_4p(im, k, d)
+            end = time.time()
+
+        else:
+            mid = time.time()
+            output, ids, pos, ori = pose_estimation(im, k, d, marker_type, dict_type)
+            end = time.time()
 
         if args["broadcast"]:
             if len(pos) and len(ori):
