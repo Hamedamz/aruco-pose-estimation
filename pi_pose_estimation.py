@@ -239,7 +239,7 @@ def save_data(images, data):
         cv2.imwrite(os.path.join(images_dir, f"{t}.jpg"), im)
 
 
-def pose_estimation_4p(im, k, d):
+def pose_estimation_p4(im, k, d):
     im = cv2.GaussianBlur(im, (9, 9), 0)
     grey = cv2.cvtColor(im, cv2.COLOR_RGB2GRAY)
     grey = cv2.threshold(grey, 255 * 0.75, 255, cv2.THRESH_BINARY)[1]
@@ -285,7 +285,7 @@ if __name__ == '__main__':
     ap.add_argument("-s", "--marker_size", type=float, default=0.02, help="Dimention of marker (meter)")
     ap.add_argument("-k", "--K_Matrix", help="Path to calibration matrix (numpy file)")
     ap.add_argument("-d", "--D_Coeff", help="Path to distortion coefficients (numpy file)")
-    ap.add_argument("-m", "--marker", type=str, default="ARUCO", help="Type of tag to detect. One of ARUCO, APRILTAG, STAG, or 4P")
+    ap.add_argument("-m", "--marker", type=str, default="ARUCO", help="Type of tag to detect. One of ARUCO, APRILTAG, STAG, or P4")
     ap.add_argument("-c", "--dict", type=str, default="DICT_4X4_100", help="Type of dictionary of tag to detect")
     ap.add_argument("-t", "--duration", type=int, default=60, help="Duration of sampling (second)")
     ap.add_argument("-n", "--sample", type=str, default=30, help="Number of samples per second")
@@ -416,7 +416,7 @@ if __name__ == '__main__':
 
         if marker_type == '4P':
             mid = time.time()
-            output, ids, pos, ori = pose_estimation_4p(im, k, d)
+            output, ids, pos, ori = pose_estimation_p4(im, k, d)
             end = time.time()
 
         else:
