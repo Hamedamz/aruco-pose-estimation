@@ -20,4 +20,5 @@ class Marker(Enum):
     ARUCO = 1
     STAG = 2
     APRILTAG = 3
+    P4 = 4
 
