@@ -2,8 +2,9 @@ from enum import Enum
 
 
 camera_map = {
+    "arducam": 0,
     "pi3": 0,
-    "pi3w": 1,
+    "pi3w": 0,
     "pihq6mm": 0,
 }
 

@@ -1,6 +1,11 @@
 '''
-Sample Usage:-
-python pi_pose_estimation.py -i pi3 -r 720p -e test -t 1000 --marker_size 0.02 --live
+Sample Usage:
+source env/bin/activate
+python pi_pose_estimation.py -i pi3 -r 720p -t 10 --marker_size 0.02 --live -e 200mm.
+Indicate the actual distance you are measuring by passing -e input. Format it as [distance in millimeters]mm.
+Pass --save flag to save results in the results directory.
+To process, make a directory inside the data directory and copy the experiment results you want to process to it.
+Then, run python process.py -i [dir name] to generate summary tables.
 '''
 
 
@@ -125,7 +130,11 @@ def pose_estimation(frame, matrix_coefficients, distortion_coefficients, marker_
                               [marker_size / 2, -marker_size / 2, 0],
                               [-marker_size / 2, -marker_size / 2, 0]], dtype=np.float32)
     
+    #kernel = np.array([[0,-.5,0],[-.5,2,-.5],[0,-.5,0]], np.uint8)
+    #gray = cv2.filter2D(frame, ddepth=-1, kernel=kernel)
     gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+    #gray = np.clip(gray, 0, 255)
+    
     pos = []
     ori = []
     if marker_type is Marker.ARUCO:
@@ -272,7 +281,7 @@ def pose_estimation_p4(im, k, d):
 
 if __name__ == '__main__':
     ap = argparse.ArgumentParser()
-    ap.add_argument("-i", "--camera", required=True, type=str, help="One of aideck, pi3, pi3w, or pihq6mm")
+    ap.add_argument("-i", "--camera", required=True, type=str, help="One of arducam, aideck, pi3, pi3w, or pihq6mm")
     ap.add_argument("-s", "--marker_size", type=float, default=0.02, help="Dimention of marker (meter)")
     ap.add_argument("-k", "--K_Matrix", help="Path to calibration matrix (numpy file)")
     ap.add_argument("-d", "--D_Coeff", help="Path to distortion coefficients (numpy file)")
